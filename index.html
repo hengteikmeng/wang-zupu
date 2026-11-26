@@ -68,6 +68,7 @@ button.primary{background:var(--seal);border-color:var(--seal);color:#fff}
 .node .s{font-size:12px;color:var(--muted);white-space:nowrap}
 .node.on{border-color:var(--seal)}
 .node.sel{box-shadow:0 0 0 2px var(--seal)}
+.node.anc{background:var(--card);border-style:dashed}
 .node.me{background:var(--seal);border-color:var(--seal)} .node.me .n,.node.me .s,.node.me .n small{color:#fff}
 /* origin */
 .origin{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr);gap:18px;align-items:start}
@@ -132,7 +133,7 @@ mark{background:var(--hl);color:inherit;border-radius:2px}
 
 <section id="v-tree">
   <div class="panel" id="who"></div>
-  <p class="muted small" style="margin:10px 0 6px">点任何一个人，就看到他跟「我」的关系，红线是你们之间的连线。资料来自《王氏（宏裕后裔，居马来西亚）》图表，四代共 <span id="cnt"></span> 人。</p>
+  <p class="muted small" style="margin:10px 0 6px">点任何一个人，就看到他跟「我」的关系，红线是你们之间的连线。资料来自《王氏（宏裕后裔，居马来西亚）》图表，四代共 <span id="cnt"></span> 人。树<b>往左滑</b>可以一直看到第 1 世南岳公（第 1–19 世出自族谱原书，点名字打开那一页）。</p>
   <details class="panel" id="anc" style="margin-bottom:12px">
     <summary><b>直系祖先 <span id="ancn"></span> 代</b><span class="muted small">　南岳公（1 世）→ … → 宏裕公（19 世）→ 华崇公（20 世）→ 我　· 点开看每一代</span></summary>
     <p class="small muted">第 1–19 世出自族谱原书，点名字就打开那一页。第 19 世<b>宏裕</b>公在书里注明「后裔居马来西亚」（第 40 页），正好接上家里图表的第 20 世华崇公。</p>
@@ -310,19 +311,23 @@ function layout(){
   return cur;
 }
 function drawTree(){
-  const H = layout(), W = CW*3 + NW;
+  const H = layout(), OFF = 19*CW, W = OFF + CW*3 + NW;
   const box = $("ft"); box.style.width = W+"px"; box.style.height = H+"px";
   let svg = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">`, html = "";
-  for (let g=0; g<4; g++) html += `<div class="gen" style="left:${g*CW}px">${20+g}世<small>「${POEM[8+g]}」字辈</small></div>`;
+  for (let g=1; g<=23; g++) html += `<div class="gen" style="left:${(g-1)*CW}px">${g}世${g>=12?`<small>「${POEM[g-12]}」字辈</small>`:""}</div>`;
+  const ay = TOP + 13, ry = root.y + hOf(root)/2;
+  LINE.forEach(a => { const x = (a[0]-1)*CW, x2 = a[0]===19 ? OFF : a[0]*CW;
+    svg += a[0]===19 ? `<path class="ancp" d="M${x+NW} ${ay} C${(x+NW+x2)/2} ${ay} ${(x+NW+x2)/2} ${ry} ${x2} ${ry}"/>` : `<path class="ancp" d="M${x+NW} ${ay} L${x2} ${ay}"/>`;
+    html += `<button class="node anc" data-g="${a[0]}" style="left:${x}px;top:${ay-13}px"><div class="n">${a[1]}公<small>${a[0]===1?"始祖 · ":""}书第 ${a[2]} 页</small></div></button>`; });
   people.filter(p=>p.blood).forEach(p => {
-    const x = p.depth*CW, cy = p.y + hOf(p)/2;
-    p.kids.forEach(k => { const ky = k.y + hOf(k)/2, x1 = x+NW, x2 = k.depth*CW, mx = (x1+x2)/2;
+    const x = OFF + p.depth*CW, cy = p.y + hOf(p)/2;
+    p.kids.forEach(k => { const ky = k.y + hOf(k)/2, x1 = x+NW, x2 = OFF + k.depth*CW, mx = (x1+x2)/2;
       svg += `<path id="e${k.id}" d="M${x1} ${cy} C${mx} ${cy} ${mx} ${ky} ${x2} ${ky}"/>`; });
     html += `<button class="node" id="n${p.id}" data-id="${p.id}" style="left:${x}px;top:${p.y}px">
       <div class="n">${esc(p.name)}${p.role?`<small>${esc(p.role)}</small>`:""}</div>${p.spouse?`<div class="s" data-id="${p.spouse.id}">${esc(p.spouse.name)}（${p.spouse.role}）</div>`:""}</button>`;
   });
   box.innerHTML = svg + "</svg>" + html;
-  box.addEventListener("click", e => { const s = e.target.closest(".s"), n = e.target.closest(".node"); if (s) pick(people[+s.dataset.id]); else if (n) pick(people[+n.dataset.id]); });
+  box.addEventListener("click", e => { const s = e.target.closest(".s"), n = e.target.closest(".node"); if (s) pick(people[+s.dataset.id]); else if (n && n.dataset.g) lineClick(e); else if (n) pick(people[+n.dataset.id]); });
   $("cnt").textContent = people.length;
 }
 function paint(){
@@ -432,6 +437,7 @@ function syncBar(){ $("bar").hidden = cur!=="tree" || !$("bar").innerHTML; }
 function go(v){ show(v); if (location.hash !== "#"+v) location.hash = v; }
 function show(v){ if (!VIEWS.includes(v)) v = "tree"; if (v===cur) return; cur = v; window.scrollTo(0,0); syncBar();
   VIEWS.forEach(x => { $("v-"+x).hidden = x!==v; });
+  if (v==="tree" && !window.__tl){ const tb = document.querySelector(".treebox"); if (tb.clientWidth){ tb.scrollLeft = 19*CW; window.__tl = 1; } }
   document.querySelectorAll("nav.tabs a").forEach(a => a.setAttribute("aria-current", a.dataset.v===v));
   if (v==="book" && !$("pimg").src) showPage(page);
   if (v==="search") search($("q").value);
