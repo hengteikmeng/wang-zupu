@@ -267,9 +267,9 @@ function build(a, parent, depth){
 }
 const root = build(FAMILY, null, 0);
 people.forEach(p => { p.py = (PY[p.name]||"").toLowerCase(); });
-let me = null, sel = null;
-try { const s = localStorage.getItem("wang-me"); const m = people.find(p => p.name === s && p.blood); if (m) me = m; } catch(e){}
-try { const u = new URLSearchParams(location.search).get("me"); const m = u && people.find(p => p.name === u && p.blood); if (m) me = m; } catch(e){}
+let me = null, sel = null, asWho = "";
+try { const s = localStorage.getItem("wang-me"); const m = people.find(p => p.name === s && p.blood); if (m){ me = m; asWho = localStorage.getItem("wang-as") || ""; } } catch(e){}
+try { const u = new URLSearchParams(location.search).get("me"); const m = u && people.find(p => p.name === u && p.blood); if (m){ me = m; asWho = ""; } } catch(e){}
 const anc = p => { const a=[]; for(let x=p; x; x=x.parent) a.push(x); return a; };
 const idx = p => p.parent ? p.parent.kids.indexOf(p) : 0;
 function older(a,b){ // true/false when both same sex under same parent (listed in birth order), else null
@@ -353,7 +353,7 @@ function paint(){
   if (me) $("n"+me.id).classList.add("me");
   const T = sel || me;
   if (!T){
-    $("who").innerHTML = `<div class="rel"><b>你是谁？</b>在上面搜你的名字（中文或拼音都可以），或在树上点你自己，再按「我是这个人」。</div><div class="small muted">选好以后，点树上任何一个人，就看到他是你的什么人。这台手机会记住你，下次打开不用再选。</div>`;
+    $("who").innerHTML = `<div class="rel"><b>你是谁？</b>在上面搜你的名字（中文或拼音都可以），或在树上点你自己，再按「我是这个人」。</div><div class="small">不在族谱里（例如女朋友、朋友）？点你认识的那个人，按「用 TA 的角度看」，就知道别人是 TA 的什么人。不想选也可以，直接随便看。</div><div class="small muted">这台手机会记住，下次打开不用再选。</div>`;
     $("bar").innerHTML = ""; syncBar(); return; }
   const tb = T.blood ? T : T.partner;
   const gen = (T.depth+20);
@@ -362,25 +362,27 @@ function paint(){
   const dad = T.blood && tb.parent ? `父亲：${esc(tb.parent.name)}` : "";
   let mid = "";
   if (!me){
-    mid = `<div class="small">如果这是你，按「我是这个人」。之后点别人，就看到他是你的什么人。</div>`;
+    mid = T.blood ? `<div class="small">是你就按「我是这个人」。不在族谱里，可以按「用 TA 的角度看」。</div>` : `<div class="small">是你就按「我是这个人」，会用你另一半 ${esc(T.partner.name)} 的角度看大家。</div>`;
     $("bar").innerHTML = "";
   } else {
     const r = relation(T);
     r.path.forEach(p => { $("n"+p.id).classList.add("on"); });
     for (let i=0;i<r.path.length-1;i++){ const a=r.path[i], b=r.path[i+1], kid = a.parent===b ? a : b; const e = $("e"+kid.id); if (e) e.classList.add("on"); }
     const chain = r.path.map(p => `<span class="p">${esc(p.name)}</span>`).join("<span>→</span>") + (r.via ? `<span>＋ 配偶</span><span class="p">${esc(T.name)}</span>` : "");
-    mid = `<div class="rel">${T===me ? `这是<b>我</b>。点树上任何一个人，看他是我的什么人。` : `是 <b>${esc(me.name)}</b> 的 <b>${esc(r.term)}</b>`}</div>
+    mid = `<div class="rel">${T===me ? (asWho==="sp" ? `这是你的另一半 <b>${esc(me.name)}</b>。点树上任何一个人，看他是 ${esc(me.name)} 的什么人。` : asWho==="view" ? `现在用 <b>${esc(me.name)}</b> 的角度看。点树上任何一个人，看他是 ${esc(me.name)} 的什么人。` : `这是<b>我</b>。点树上任何一个人，看他是我的什么人。`) : `是 <b>${esc(me.name)}</b> 的 <b>${esc(r.term)}</b>`}</div>
     ${T!==me ? `<div class="chain">${chain}</div><div class="small muted">共同的祖先：${esc(r.lca.name)}</div>` : ""}`;
     $("bar").innerHTML = T===me ? "" : `${esc(T.name)} 是 ${esc(me.name)} 的 <b>${esc(r.term)}</b>`;
   }
   $("n"+tb.id).classList.add("sel");
-  $("who").innerHTML = `<div class="row" style="justify-content:space-between"><div><span class="name">${esc(T.name)}</span> <span class="muted">第 ${gen} 世 · 「${POEM[T.depth+8]}」字辈${T.role?" · "+esc(T.role):""}</span></div>
-    ${T.blood && T!==me ? `<button id="setme"${me?"":` class="primary"`}>我是这个人</button>` : ""}${T===me ? `<button id="clrme">换人</button>` : ""}</div>
+  $("who").innerHTML = `<div class="row" style="justify-content:space-between"><div><span class="name">${esc(T.name)}</span> <span class="muted">第 ${gen} 世${T.blood?` · 「${POEM[T.depth+8]}」字辈`:""}${T.role?" · "+esc(T.role):""}</span></div>
+    <div class="row">${(T.blood || !me) && T!==me ? `<button id="setme"${me?"":` class="primary"`}>我是这个人</button>` : ""}${T.blood && !me ? `<button id="asme">用 TA 的角度看</button>` : ""}${T===me ? `<button id="clrme">换人</button>` : ""}</div></div>
     ${mid}
     <div class="small muted">${[dad,sp,kids].filter(Boolean).join(" · ")}</div>`;
   syncBar();
-  const b = $("setme"); if (b) b.onclick = () => { me = T; sel = null; try{localStorage.setItem("wang-me", me.name)}catch(e){} paint(); paintPoem(); paintLine(); };
-  const c = $("clrme"); if (c) c.onclick = () => { me = null; sel = null; try{localStorage.removeItem("wang-me")}catch(e){} paint(); paintPoem(); paintLine(); $("q").focus(); };
+  const setMe = (p, a) => { me = p; asWho = a; sel = null; try{ localStorage.setItem("wang-me", me.name); localStorage.setItem("wang-as", a); }catch(e){} paint(); paintPoem(); paintLine(); };
+  const b = $("setme"); if (b) b.onclick = () => T.blood ? setMe(T, "") : setMe(T.partner, "sp");
+  const v = $("asme"); if (v) v.onclick = () => setMe(T, "view");
+  const c = $("clrme"); if (c) c.onclick = () => { me = null; asWho = ""; sel = null; try{localStorage.removeItem("wang-me"); localStorage.removeItem("wang-as")}catch(e){} paint(); paintPoem(); paintLine(); $("q").focus(); };
 }
 function pick(p, scroll){ sel = p; paint(); if (scroll){ const n = $("n"+(p.blood?p:p.partner).id); n.scrollIntoView({block:"center",inline:"center"}); } }
 
@@ -388,7 +390,7 @@ function paintLine(){
   const ref = me || root, mg = 20 + ref.depth, chain = []; for (let p = ref; p; p = p.parent) chain.unshift(p);
   const up = n => !me ? "" : (UP[n] || ("上 " + n + " 代")); $("ancn").textContent = mg;
   $("line").innerHTML = LINE.map(a => `<button data-g="${a[0]}" class="${a[0]===19?"key":""}"><small>${a[0]}世</small><b>${a[1]}</b><small>${up(mg-a[0])}</small></button>`).join(`<span class="arr">→</span>`)
-    + chain.map(p => `<span class="arr">→</span><button class="fam${p===me?" key":""}" data-id="${p.id}"><small>${20+p.depth}世</small><b>${esc(p.name)}</b><small>${p===me?"我":up(mg-20-p.depth)}</small></button>`).join("");
+    + chain.map(p => `<span class="arr">→</span><button class="fam${p===me?" key":""}" data-id="${p.id}"><small>${20+p.depth}世</small><b>${esc(p.name)}</b><small>${p===me?(asWho==="sp"?"另一半":asWho==="view"?"看的角度":"我"):up(mg-20-p.depth)}</small></button>`).join("");
 }
 function lineClick(e){ const b = e.target.closest("button"); if (!b) return;
   if (b.dataset.id){ pick(people[+b.dataset.id], true); return; }
