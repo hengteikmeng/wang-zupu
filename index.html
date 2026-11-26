@@ -123,7 +123,7 @@ mark{background:var(--hl);color:inherit;border-radius:2px}
 
 <header class="top"><div class="wrap">
   <div class="brand"><h1><span class="seal">王</span> 王氏族谱</h1><span>广东澄海外砂 · 南岳祖 · 文愚公派下</span></div>
-  <div class="searchbar"><input id="q" type="search" placeholder="搜名字：得铭 / 介忠 / deming / jiezhong" autocomplete="off" aria-label="搜名字"></div>
+  <div class="searchbar"><input id="q" type="search" placeholder="搜你的名字：中文或拼音，例如 介忠 / jiezhong" autocomplete="off" aria-label="搜名字"></div>
   <nav class="tabs" aria-label="分页">
     <a href="#tree" data-v="tree">家族树</a><a href="#origin" data-v="origin">寻根</a><a href="#search" data-v="search">搜名字</a><a href="#book" data-v="book">翻原书</a>
   </nav>
@@ -267,8 +267,9 @@ function build(a, parent, depth){
 }
 const root = build(FAMILY, null, 0);
 people.forEach(p => { p.py = (PY[p.name]||"").toLowerCase(); });
-let me = people.find(p => p.name === "王得铭"), sel = null;
+let me = null, sel = null;
 try { const s = localStorage.getItem("wang-me"); const m = people.find(p => p.name === s && p.blood); if (m) me = m; } catch(e){}
+try { const u = new URLSearchParams(location.search).get("me"); const m = u && people.find(p => p.name === u && p.blood); if (m) me = m; } catch(e){}
 const anc = p => { const a=[]; for(let x=p; x; x=x.parent) a.push(x); return a; };
 const idx = p => p.parent ? p.parent.kids.indexOf(p) : 0;
 function older(a,b){ // true/false when both same sex under same parent (listed in birth order), else null
@@ -349,27 +350,43 @@ function drawTree(){
 }
 function paint(){
   document.querySelectorAll("#ft .on,#ft .me,#ft .sel").forEach(e => e.classList.remove("on","me","sel"));
-  $("n"+me.id).classList.add("me");
-  const T = sel || me, r = relation(T), tb = T.blood ? T : T.partner;
-  r.path.forEach(p => { $("n"+p.id).classList.add("on"); });
-  for (let i=0;i<r.path.length-1;i++){ const a=r.path[i], b=r.path[i+1], kid = a.parent===b ? a : b; const e = $("e"+kid.id); if (e) e.classList.add("on"); }
-  $("n"+tb.id).classList.add("sel");
-  const gen = (T.depth+20), chain = r.path.map(p => `<span class="p">${esc(p.name)}</span>`).join("<span>→</span>") + (r.via ? `<span>＋ 配偶</span><span class="p">${esc(T.name)}</span>` : "");
+  if (me) $("n"+me.id).classList.add("me");
+  const T = sel || me;
+  if (!T){
+    $("who").innerHTML = `<div class="rel"><b>你是谁？</b>在上面搜你的名字（中文或拼音都可以），或在树上点你自己，再按「我是这个人」。</div><div class="small muted">选好以后，点树上任何一个人，就看到他是你的什么人。这台手机会记住你，下次打开不用再选。</div>`;
+    $("bar").innerHTML = ""; syncBar(); return; }
+  const tb = T.blood ? T : T.partner;
+  const gen = (T.depth+20);
   const sp = T.blood ? (T.spouse ? `配偶：${esc(T.spouse.name)}` : "") : `${esc(T.partner.name)} 的配偶`;
   const kids = tb.kids.length ? `子女 ${tb.kids.length} 人：${tb.kids.map(k=>esc(k.name)).join("、")}` : "";
+  const dad = T.blood && tb.parent ? `父亲：${esc(tb.parent.name)}` : "";
+  let mid = "";
+  if (!me){
+    mid = `<div class="small">如果这是你，按「我是这个人」。之后点别人，就看到他是你的什么人。</div>`;
+    $("bar").innerHTML = "";
+  } else {
+    const r = relation(T);
+    r.path.forEach(p => { $("n"+p.id).classList.add("on"); });
+    for (let i=0;i<r.path.length-1;i++){ const a=r.path[i], b=r.path[i+1], kid = a.parent===b ? a : b; const e = $("e"+kid.id); if (e) e.classList.add("on"); }
+    const chain = r.path.map(p => `<span class="p">${esc(p.name)}</span>`).join("<span>→</span>") + (r.via ? `<span>＋ 配偶</span><span class="p">${esc(T.name)}</span>` : "");
+    mid = `<div class="rel">${T===me ? `这是<b>我</b>。点树上任何一个人，看他是我的什么人。` : `是 <b>${esc(me.name)}</b> 的 <b>${esc(r.term)}</b>`}</div>
+    ${T!==me ? `<div class="chain">${chain}</div><div class="small muted">共同的祖先：${esc(r.lca.name)}</div>` : ""}`;
+    $("bar").innerHTML = T===me ? "" : `${esc(T.name)} 是 ${esc(me.name)} 的 <b>${esc(r.term)}</b>`;
+  }
+  $("n"+tb.id).classList.add("sel");
   $("who").innerHTML = `<div class="row" style="justify-content:space-between"><div><span class="name">${esc(T.name)}</span> <span class="muted">第 ${gen} 世 · 「${POEM[T.depth+8]}」字辈${T.role?" · "+esc(T.role):""}</span></div>
-    ${T.blood && T!==me ? `<button id="setme">我是这个人</button>` : ""}</div>
-    <div class="rel">${T===me ? `这是<b>我</b>。点树上任何一个人，看他是我的什么人。` : `是 <b>${esc(me.name)}</b> 的 <b>${esc(r.term)}</b>`}</div>
-    ${T!==me ? `<div class="chain">${chain}</div><div class="small muted">共同的祖先：${esc(r.lca.name)}</div>` : ""}
-    <div class="small muted">${[sp,kids].filter(Boolean).join(" · ")}</div>`;
-  $("bar").innerHTML = T===me ? "" : `${esc(T.name)} 是 ${esc(me.name)} 的 <b>${esc(r.term)}</b>`; syncBar();
+    ${T.blood && T!==me ? `<button id="setme"${me?"":` class="primary"`}>我是这个人</button>` : ""}${T===me ? `<button id="clrme">换人</button>` : ""}</div>
+    ${mid}
+    <div class="small muted">${[dad,sp,kids].filter(Boolean).join(" · ")}</div>`;
+  syncBar();
   const b = $("setme"); if (b) b.onclick = () => { me = T; sel = null; try{localStorage.setItem("wang-me", me.name)}catch(e){} paint(); paintPoem(); paintLine(); };
+  const c = $("clrme"); if (c) c.onclick = () => { me = null; sel = null; try{localStorage.removeItem("wang-me")}catch(e){} paint(); paintPoem(); paintLine(); $("q").focus(); };
 }
 function pick(p, scroll){ sel = p; paint(); if (scroll){ const n = $("n"+(p.blood?p:p.partner).id); n.scrollIntoView({block:"center",inline:"center"}); } }
 
 function paintLine(){
-  const mg = 20 + me.depth, chain = []; for (let p = me; p; p = p.parent) chain.unshift(p);
-  const up = n => UP[n] || ("上 " + n + " 代"); $("ancn").textContent = mg;
+  const ref = me || root, mg = 20 + ref.depth, chain = []; for (let p = ref; p; p = p.parent) chain.unshift(p);
+  const up = n => !me ? "" : (UP[n] || ("上 " + n + " 代")); $("ancn").textContent = mg;
   $("line").innerHTML = LINE.map(a => `<button data-g="${a[0]}" class="${a[0]===19?"key":""}"><small>${a[0]}世</small><b>${a[1]}</b><small>${up(mg-a[0])}</small></button>`).join(`<span class="arr">→</span>`)
     + chain.map(p => `<span class="arr">→</span><button class="fam${p===me?" key":""}" data-id="${p.id}"><small>${20+p.depth}世</small><b>${esc(p.name)}</b><small>${p===me?"我":up(mg-20-p.depth)}</small></button>`).join("");
 }
@@ -380,7 +397,7 @@ function lineClick(e){ const b = e.target.closest("button"); if (!b) return;
 
 /* ---------- origin ---------- */
 function paintPoem(){
-  $("poem").innerHTML = [...POEM].map((c,i) => { const g = 12+i; return `<div class="${g>=20&&g<=23?(g===20+me.depth?"me":"on"):""}"><b>${c}</b><small>${g}世</small></div>`; }).join("");
+  $("poem").innerHTML = [...POEM].map((c,i) => { const g = 12+i; return `<div class="${g>=20&&g<=23?(me && g===20+me.depth?"me":"on"):""}"><b>${c}</b><small>${g}世</small></div>`; }).join("");
 }
 function drawMap(){
   const X = lon => (lon-95)*20, Y = lat => (42-lat)*20, pts = a => a.map(p => X(p[0]).toFixed(0)+","+Y(p[1]).toFixed(0)).join(" ");
@@ -423,8 +440,8 @@ function search(raw){
   let html = "";
   const qb = cjk ? q.replace(/^王(?=..)/,"") : q.replace(/^wang(?=.{2})/,"");
   const fam = people.filter(p => cjk ? (p.name.includes(q) || p.name.includes(qb)) : (p.py.includes(q) || p.py.includes(qb)));
-  if (fam.length){ html += `<h3>马来西亚这一支（${fam.length}）</h3>` + fam.map(p => { const r = relation(p);
-      return `<button class="hit" data-person="${p.id}"><span class="nm">${cjk?mark(p.name, p.name.includes(q)?q:qb):esc(p.name)}</span><span class="pg">第 ${p.depth+20} 世</span><span class="meta">${p===me?"我":"我的"+esc(r.term)}${p.blood?"":" · "+esc(p.partner.name)+" 的配偶"}</span></button>`; }).join(""); }
+  if (fam.length){ html += `<h3>马来西亚这一支（${fam.length}）</h3>` + fam.map(p => { const r = me ? relation(p) : null;
+      return `<button class="hit" data-person="${p.id}"><span class="nm">${cjk?mark(p.name, p.name.includes(q)?q:qb):esc(p.name)}</span><span class="pg">第 ${p.depth+20} 世</span><span class="meta">${p===me?"我":r?"我的"+esc(r.term):(p.role?esc(p.role):"")}${p.blood?"":" · "+esc(p.partner.name)+" 的配偶"}</span></button>`; }).join(""); }
   const seen = new Set(); let hits = [];
   BOOK.names.forEach(n => { if (cjk ? n[0].includes(qb) : n[3].includes(qb)) { hits.push(n); seen.add(n[1]); } });
   let extra = [];
