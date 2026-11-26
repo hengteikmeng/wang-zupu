@@ -333,10 +333,10 @@ function drawTree(){
   const box = $("ft"); box.style.width = W+"px"; box.style.height = H+"px";
   let svg = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">`, html = "";
   for (let g=1; g<=23; g++) html += `<div class="gen" style="left:${(g-1)*CW}px">${g}世${g>=12?`<small>「${POEM[g-12]}」字辈</small>`:""}</div>`;
-  const ay = TOP + 13, ry = root.y + hOf(root)/2;
-  LINE.forEach(a => { const x = (a[0]-1)*CW, x2 = a[0]===19 ? OFF : a[0]*CW;
-    svg += a[0]===19 ? `<path class="ancp" d="M${x+NW} ${ay} C${(x+NW+x2)/2} ${ay} ${(x+NW+x2)/2} ${ry} ${x2} ${ry}"/>` : `<path class="ancp" d="M${x+NW} ${ay} L${x2} ${ay}"/>`;
-    html += `<button class="node anc" data-g="${a[0]}" style="left:${x}px;top:${ay-13}px"><div class="n">${a[1]}公<small>${a[0]===1?"始祖 · ":""}书第 ${a[2]} 页</small></div></button>`; });
+  window.__ry = root.y + hOf(root)/2;
+  LINE.forEach(a => { const x = (a[0]-1)*CW;
+    svg += `<path class="ancp" id="ap${a[0]}" d=""/>`;
+    html += `<button class="node anc" id="an${a[0]}" data-g="${a[0]}" style="left:${x}px;top:${TOP}px"><div class="n">${a[1]}公<small>${a[0]}世${a[0]===1?" · 始祖":""}</small></div></button>`; });
   people.filter(p=>p.blood).forEach(p => {
     const x = OFF + p.depth*CW, cy = p.y + hOf(p)/2;
     p.kids.forEach(k => { const ky = k.y + hOf(k)/2, x1 = x+NW, x2 = OFF + k.depth*CW, mx = (x1+x2)/2;
@@ -471,11 +471,27 @@ function syncBar(){ $("bar").hidden = cur!=="tree" || !$("bar").innerHTML; }
 function go(v){ show(v); if (location.hash !== "#"+v) location.hash = v; }
 function show(v){ if (!VIEWS.includes(v)) v = "tree"; if (v===cur) return; cur = v; window.scrollTo(0,0); syncBar();
   VIEWS.forEach(x => { $("v-"+x).hidden = x!==v; });
+  if (v==="tree") { window.__ay = null; ancSoon(); }
   if (v==="tree" && !window.__tl){ const tb = document.querySelector(".treebox"); if (tb.clientWidth){ tb.scrollLeft = 19*CW; window.__tl = 1; } }
   document.querySelectorAll("nav.tabs a").forEach(a => a.setAttribute("aria-current", a.dataset.v===v));
   if (v==="book" && !$("pimg").src) showPage(page);
   if (v==="search") search($("q").value);
 }
+/* ancestors 1-19 follow the part of the tree that is on screen */
+function placeAnc(){
+  const ft = $("ft"); if (!ft || !$("an1") || $("v-tree").hidden) return;
+  const r = ft.getBoundingClientRect(), H = ft.offsetHeight, ry = window.__ry, OFF = 19*CW;
+  const y = Math.round(Math.max(TOP+13, Math.min(H-20, innerHeight*0.45 - r.top)));
+  if (window.__ay === y) return; window.__ay = y;
+  LINE.forEach(a => { const g = a[0], x = (g-1)*CW, x1 = x+NW;
+    $("an"+g).style.top = (y-13)+"px";
+    const x2 = g===19 ? OFF : g*CW, mx = (x1+x2)/2;
+    $("ap"+g).setAttribute("d", g===19 ? `M${x1} ${y} C${mx} ${y} ${mx} ${ry} ${x2} ${ry}` : `M${x1} ${y} L${x2} ${y}`); });
+}
+let __ancRaf = 0;
+const ancSoon = () => { if (!__ancRaf) __ancRaf = requestAnimationFrame(() => { __ancRaf = 0; placeAnc(); }); };
+window.addEventListener("scroll", ancSoon, {passive:true});
+window.addEventListener("resize", ancSoon);
 window.addEventListener("hashchange", () => show(location.hash.slice(1)));
 $("q").addEventListener("input", e => { if (location.hash !== "#search") location.hash = "search"; search(e.target.value); });
 $("prev").onclick = () => showPage(page-1); $("next").onclick = () => showPage(page+1);
