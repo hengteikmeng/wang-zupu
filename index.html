@@ -60,7 +60,8 @@ button.primary{background:var(--seal);border-color:var(--seal);color:#fff}
 #ft.zs .gen small{display:none}
 #scope .zm{margin-left:auto;display:flex;gap:4px;align-items:center}
 #scope .zm button{min-width:38px;padding:4px 8px}
-#ft{position:relative;margin:12px}
+#fz{position:relative;margin:12px;overflow:hidden}
+#ft{position:absolute;left:0;top:0;transform-origin:0 0}
 #ft svg{position:absolute;inset:0;pointer-events:none}
 #ft path{fill:none;stroke:var(--sage);stroke-width:1.6;opacity:.75}
 #ft path.on{stroke:var(--seal);stroke-width:2.6;opacity:1}
@@ -147,7 +148,7 @@ mark{background:var(--hl);color:inherit;border-radius:2px}
     <div class="line" id="line"></div>
   </details>
   <div class="row" id="scope"></div>
-  <div class="treebox"><div id="ft"></div></div>
+  <div class="treebox"><div id="fz"><div id="ft"></div></div></div>
 </section>
 
 <section id="v-origin" hidden>
@@ -360,7 +361,7 @@ function layout(){
 }
 function drawTree(){
   setVis(); applyZoom(); const H = layout(), OFF = 19*CW, W = OFF + CW*4 + NW;
-  const box = $("ft"); box.style.width = W+"px"; box.style.height = H+"px";
+  const box = $("ft"); box.style.width = W+"px"; box.style.height = H+"px"; applyZoom();
   let svg = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">`, html = "";
   for (let g=1; g<=24; g++) html += `<div class="gen" style="left:${(g-1)*CW}px">${g}世${g>=12?`<small>「${POEM[g-12]}」字辈</small>`:""}</div>`;
   window.__ry = root.y + hOf(root)/2;
@@ -381,15 +382,16 @@ function drawTree(){
   window.__ay = window.__gy = null; ancSoon();
 }
 $("ft").addEventListener("click", e => { const s = e.target.closest(".s"), n = e.target.closest(".node"); if (s) pick(people[+s.dataset.id]); else if (n && n.dataset.g) lineClick(e); else if (n) pick(people[+n.dataset.id]); });
-function applyZoom(){ const ft = $("ft"); ft.style.zoom = ZM; ft.style.setProperty("--iz", Math.max(1, Math.min(1/ZM, 4.4)).toFixed(3)); ft.classList.toggle("zs", ZM < 0.75); const z = $("zpct"); if (z) z.textContent = Math.round(ZM*100) + "%"; }
+function applyZoom(){ const ft = $("ft"), fz = $("fz"); ft.style.transform = ZM === 1 ? "" : `scale(${ZM})`; fz.style.width = (parseFloat(ft.style.width)||0)*ZM + "px"; fz.style.height = (parseFloat(ft.style.height)||0)*ZM + "px"; ft.style.setProperty("--iz", Math.max(1, Math.min(1/ZM, 4.4)).toFixed(3)); ft.classList.toggle("zs", ZM < 0.75); const z = $("zpct"); if (z) z.textContent = Math.round(ZM*100) + "%"; }
 function setZoom(z, mx, my){ // keep the point (mx,my) on screen still
   z = Math.min(ZMAX, Math.max(ZMIN, z)); if (Math.abs(z - ZM) < 0.001) return;
-  const ft = $("ft"), tb = document.querySelector(".treebox"), br = tb.getBoundingClientRect();
+  const fz = $("fz"), tb = document.querySelector(".treebox"), br = tb.getBoundingClientRect();
   if (mx == null){ mx = br.left + tb.clientWidth/2; my = innerHeight/2; }
-  const r0 = ft.getBoundingClientRect(), cx = (tb.scrollLeft + mx - br.left)/ZM, cy = (my - r0.top)/ZM;
+  const r0 = fz.getBoundingClientRect(), cx = (mx - r0.left)/ZM, cy = (my - r0.top)/ZM;
   ZM = z; applyZoom();
-  tb.scrollLeft = cx*ZM - (mx - br.left);
-  window.scrollBy(0, (ft.getBoundingClientRect().top + cy*ZM) - my);
+  const r1 = fz.getBoundingClientRect();
+  tb.scrollLeft += (r1.left + cx*ZM) - mx;
+  window.scrollBy(0, (r1.top + cy*ZM) - my);
   window.__ay = window.__gy = null; ancSoon();
   try { localStorage.setItem("wang-zoom", ZM.toFixed(3)); } catch(e){}
 }
