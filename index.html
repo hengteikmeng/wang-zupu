@@ -332,7 +332,7 @@ function relation(T){
 /* ---------- tree ---------- */
 const NW=132, CW=178, GAP=7, TOP=30;
 const HOME = people.find(p => p.name === "王华崇");
-const ZMIN = 0.25, ZMAX = 1.6;
+const ZMIN = 0.04, ZMAX = 1.6;
 let ZM = 1; try { ZM = Math.min(ZMAX, Math.max(ZMIN, +localStorage.getItem("wang-zoom") || 1)); } catch(e){}
 let full = false; try { full = localStorage.getItem("wang-full") === "1"; } catch(e){}
 let V = null; // visible blood people (null = everyone)
@@ -377,11 +377,11 @@ function drawTree(){
   box.innerHTML = svg + "</svg>" + html;
   $("cnt").textContent = people.length;
   const f = focusOf(), nv = V ? people.filter(p => shown(p)).length : people.length;
-  $("scope").innerHTML = `<button data-full="0" aria-pressed="${!full}">只看${esc(f.name.slice(1))}公这一支</button><button data-full="1" aria-pressed="${full}">看全族（${people.length} 人）</button><span class="small muted">${full?"人很多，可以先在上面搜名字":`现在显示 ${nv} 人`}</span><span class="zm"><button data-z="-1" aria-label="缩小">－</button><span class="small muted" id="zpct">${Math.round(ZM*100)}%</span><button data-z="1" aria-label="放大">＋</button></span>`;
+  $("scope").innerHTML = `<button data-full="0" aria-pressed="${!full}">只看${esc(f.name.slice(1))}公这一支</button><button data-full="1" aria-pressed="${full}">看全族（${people.length} 人）</button><span class="small muted">${full?"人很多，可以先在上面搜名字":`现在显示 ${nv} 人`}</span><span class="zm"><button data-z="fit">看整棵</button><button data-z="-1" aria-label="缩小">－</button><span class="small muted" id="zpct">${Math.round(ZM*100)}%</span><button data-z="1" aria-label="放大">＋</button></span>`;
   window.__ay = window.__gy = null; ancSoon();
 }
 $("ft").addEventListener("click", e => { const s = e.target.closest(".s"), n = e.target.closest(".node"); if (s) pick(people[+s.dataset.id]); else if (n && n.dataset.g) lineClick(e); else if (n) pick(people[+n.dataset.id]); });
-function applyZoom(){ const ft = $("ft"); ft.style.zoom = ZM; ft.style.setProperty("--iz", Math.max(1, 1/ZM).toFixed(3)); ft.classList.toggle("zs", ZM < 0.75); const z = $("zpct"); if (z) z.textContent = Math.round(ZM*100) + "%"; }
+function applyZoom(){ const ft = $("ft"); ft.style.zoom = ZM; ft.style.setProperty("--iz", Math.max(1, Math.min(1/ZM, 4.4)).toFixed(3)); ft.classList.toggle("zs", ZM < 0.75); const z = $("zpct"); if (z) z.textContent = Math.round(ZM*100) + "%"; }
 function setZoom(z, mx, my){ // keep the point (mx,my) on screen still
   z = Math.min(ZMAX, Math.max(ZMIN, z)); if (Math.abs(z - ZM) < 0.001) return;
   const ft = $("ft"), tb = document.querySelector(".treebox"), br = tb.getBoundingClientRect();
@@ -402,7 +402,7 @@ function setZoom(z, mx, my){ // keep the point (mx,my) on screen still
   tb.addEventListener("touchend", e => { if (e.touches.length < 2) d0 = 0; });
   tb.addEventListener("wheel", e => { if (!e.ctrlKey) return; e.preventDefault(); setZoom(ZM * Math.exp(-e.deltaY/300), e.clientX, e.clientY); }, {passive:false});
 })();
-$("scope").addEventListener("click", e => { const zb = e.target.closest("button[data-z]"); if (zb){ setZoom(ZM * (zb.dataset.z === "1" ? 1.25 : 0.8)); return; }
+$("scope").addEventListener("click", e => { const zb = e.target.closest("button[data-z]"); if (zb){ if (zb.dataset.z === "fit"){ const ft = $("ft"), tb = document.querySelector(".treebox"), W = parseFloat(ft.style.width), H = parseFloat(ft.style.height), hb = document.querySelector("header.top").getBoundingClientRect().bottom; setZoom(Math.min(1, (innerHeight - hb - 20)/H, tb.clientWidth/(W - 19*CW))); tb.scrollLeft = 19*CW*ZM; window.scrollTo(0, ft.getBoundingClientRect().top + scrollY - hb - 10); window.__ay = window.__gy = null; ancSoon(); } else setZoom(ZM * (zb.dataset.z === "1" ? 1.25 : 0.7)); return; }
   const b = e.target.closest("button[data-full]"); if (!b) return; setFull(b.dataset.full === "1"); const t = sel || me || focusOf(); const n = $("n"+(t.blood?t:t.partner).id); if (n) n.scrollIntoView({block:"center",inline:"center"}); });
 function setFull(v){ full = v; try{ localStorage.setItem("wang-full", v?"1":"0"); }catch(e){} drawTree(); paint(); }
 function paint(){
