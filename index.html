@@ -60,7 +60,7 @@ button.primary{background:var(--seal);border-color:var(--seal);color:#fff}
 #ft svg{position:absolute;inset:0;pointer-events:none}
 #ft path{fill:none;stroke:var(--sage);stroke-width:1.6;opacity:.75}
 #ft path.on{stroke:var(--seal);stroke-width:2.6;opacity:1}
-.gen{position:absolute;top:0;font-family:var(--serif);font-weight:700;font-size:14px}
+.gen{position:absolute;top:0;z-index:3;width:178px;padding:4px 0 5px;background:var(--card);border-bottom:1px solid var(--line);font-family:var(--serif);font-weight:700;font-size:14px}
 .gen small{font-family:var(--sans);font-weight:400;color:var(--muted);margin-left:6px}
 .node{position:absolute;width:132px;border:1px solid var(--line);border-radius:6px;background:var(--sage-soft);padding:2px 8px;cursor:pointer;line-height:1.35;text-align:left;color:var(--ink)}
 .node .n{font-weight:700;font-size:14px;white-space:nowrap}
@@ -69,6 +69,9 @@ button.primary{background:var(--seal);border-color:var(--seal);color:#fff}
 .node.on{border-color:var(--seal)}
 .node.sel{box-shadow:0 0 0 2px var(--seal)}
 .node.anc{background:var(--card);border-style:dashed}
+.node .more{display:block;font-size:11px;color:var(--muted);font-weight:400}
+#scope{margin:0 0 8px}
+#scope button[aria-pressed="true"]{background:var(--seal);border-color:var(--seal);color:#fff}
 .node.me{background:var(--seal);border-color:var(--seal)} .node.me .n,.node.me .s,.node.me .n small{color:#fff}
 /* origin */
 .origin{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr);gap:18px;align-items:start}
@@ -133,12 +136,13 @@ mark{background:var(--hl);color:inherit;border-radius:2px}
 
 <section id="v-tree">
   <div class="panel" id="who"></div>
-  <p class="muted small" style="margin:10px 0 6px">点任何一个人，就看到他跟「我」的关系，红线是你们之间的连线。资料来自《王氏（宏裕后裔，居马来西亚）》图表，四代共 <span id="cnt"></span> 人。树<b>往左滑</b>可以一直看到第 1 世南岳公（第 1–19 世出自族谱原书，点名字打开那一页）。</p>
+  <p class="muted small" style="margin:10px 0 6px">一打开先只显示华崇公这一支（选了「我」以后，显示你祖父那一支），想看全部按「看全族」。在上面打全名（例如 得铭）会直接跳到树上。点任何一个人，就看到他跟「我」的关系，红线是你们之间的连线。资料来自《王氏（宏裕后裔，居马来西亚）》图表，四代共 <span id="cnt"></span> 人。树<b>往左滑</b>可以一直看到第 1 世南岳公（第 1–19 世出自族谱原书，点名字打开那一页）。</p>
   <details class="panel" id="anc" style="margin-bottom:12px">
     <summary><b>直系祖先 <span id="ancn"></span> 代</b><span class="muted small">　南岳公（1 世）→ … → 宏裕公（19 世）→ 华崇公（20 世）→ 我　· 点开看每一代</span></summary>
     <p class="small muted">第 1–19 世出自族谱原书，点名字就打开那一页。第 19 世<b>宏裕</b>公在书里注明「后裔居马来西亚」（第 40 页），正好接上家里图表的第 20 世华崇公。</p>
     <div class="line" id="line"></div>
   </details>
+  <div class="row" id="scope"></div>
   <div class="treebox"><div id="ft"></div></div>
 </section>
 
@@ -323,22 +327,33 @@ function relation(T){
 
 /* ---------- tree ---------- */
 const NW=132, CW=178, GAP=7, TOP=30;
-const hOf = p => p.spouse ? 46 : 26;
-function subH(p){ if(!p.kids.length) return hOf(p); return Math.max(hOf(p), p.kids.reduce((s,k)=>s+subH(k)+GAP,-GAP)); }
+const HOME = people.find(p => p.name === "王华崇");
+let full = false; try { full = localStorage.getItem("wang-full") === "1"; } catch(e){}
+let V = null; // visible blood people (null = everyone)
+function focusOf(){ if (me){ const g = me.parent && me.parent.parent; return (g && g.depth >= HOME.depth) ? g : (me.parent && me.parent.depth >= HOME.depth ? me.parent : (me.depth >= HOME.depth ? me : HOME)); } return HOME; }
+function setVis(){
+  if (full){ V = null; return; }
+  const f = focusOf(); V = new Set(anc(f));
+  (function d(p){ V.add(p); p.kids.forEach(d); })(f);
+}
+const shown = p => !V || V.has(p.blood ? p : p.partner);
+const vk = p => V ? p.kids.filter(k => V.has(k)) : p.kids;
+const hOf = p => (p.spouse ? 46 : 26) + (V && p.kids.length > vk(p).length ? 15 : 0);
+function subH(p){ const ks = vk(p); if(!ks.length) return hOf(p); return Math.max(hOf(p), ks.reduce((s,k)=>s+subH(k)+GAP,-GAP)); }
 function layout(){
   let cur = TOP;
   (function lay(p){
-    const h = hOf(p);
-    if (!p.kids.length){ p.y = cur; cur += h + GAP; return; }
-    const kidsH = p.kids.reduce((s,k)=>s+subH(k)+GAP,-GAP), pad = Math.max(0,(h-kidsH)/2);
-    cur += pad; p.kids.forEach(lay); cur += pad;
-    const a = p.kids[0], b = p.kids[p.kids.length-1];
+    const h = hOf(p), ks = vk(p);
+    if (!ks.length){ p.y = cur; cur += h + GAP; return; }
+    const kidsH = ks.reduce((s,k)=>s+subH(k)+GAP,-GAP), pad = Math.max(0,(h-kidsH)/2);
+    cur += pad; ks.forEach(lay); cur += pad;
+    const a = ks[0], b = ks[ks.length-1];
     p.y = (a.y+hOf(a)/2 + b.y+hOf(b)/2)/2 - h/2;
   })(root);
   return cur;
 }
 function drawTree(){
-  const H = layout(), OFF = 19*CW, W = OFF + CW*4 + NW;
+  setVis(); const H = layout(), OFF = 19*CW, W = OFF + CW*4 + NW;
   const box = $("ft"); box.style.width = W+"px"; box.style.height = H+"px";
   let svg = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">`, html = "";
   for (let g=1; g<=24; g++) html += `<div class="gen" style="left:${(g-1)*CW}px">${g}世${g>=12?`<small>「${POEM[g-12]}」字辈</small>`:""}</div>`;
@@ -346,20 +361,25 @@ function drawTree(){
   LINE.forEach(a => { const x = (a[0]-1)*CW;
     svg += `<path class="ancp" id="ap${a[0]}" d=""/>`;
     html += `<button class="node anc" id="an${a[0]}" data-g="${a[0]}" style="left:${x}px;top:${TOP}px"><div class="n">${a[1]}公<small>${a[0]}世${a[0]===1?" · 始祖":""}</small></div></button>`; });
-  people.filter(p=>p.blood).forEach(p => {
-    const x = OFF + p.depth*CW, cy = p.y + hOf(p)/2;
-    p.kids.forEach(k => { const ky = k.y + hOf(k)/2, x1 = x+NW, x2 = OFF + k.depth*CW, mx = (x1+x2)/2;
+  people.filter(p=>p.blood && shown(p)).forEach(p => {
+    const x = OFF + p.depth*CW, cy = p.y + hOf(p)/2, hid = p.kids.length - vk(p).length;
+    vk(p).forEach(k => { const ky = k.y + hOf(k)/2, x1 = x+NW, x2 = OFF + k.depth*CW, mx = (x1+x2)/2;
       svg += `<path id="e${k.id}" d="M${x1} ${cy} C${mx} ${cy} ${mx} ${ky} ${x2} ${ky}"/>`; });
     html += `<button class="node" id="n${p.id}" data-id="${p.id}" style="left:${x}px;top:${p.y}px">
-      <div class="n">${esc(p.name)}${p.role?`<small>${esc(p.role)}</small>`:""}</div>${p.spouse?`<div class="s" data-id="${p.spouse.id}">${esc(p.spouse.name)}（${p.spouse.role}）</div>`:""}</button>`;
+      <div class="n">${esc(p.name)}${p.role?`<small>${esc(p.role)}</small>`:""}</div>${p.spouse?`<div class="s" data-id="${p.spouse.id}">${esc(p.spouse.name)}（${p.spouse.role}）</div>`:""}${hid?`<span class="more">另有 ${hid} 房没显示</span>`:""}</button>`;
   });
   box.innerHTML = svg + "</svg>" + html;
-  box.addEventListener("click", e => { const s = e.target.closest(".s"), n = e.target.closest(".node"); if (s) pick(people[+s.dataset.id]); else if (n && n.dataset.g) lineClick(e); else if (n) pick(people[+n.dataset.id]); });
   $("cnt").textContent = people.length;
+  const f = focusOf(), nv = V ? people.filter(p => shown(p)).length : people.length;
+  $("scope").innerHTML = `<button data-full="0" aria-pressed="${!full}">只看${esc(f.name.slice(1))}公这一支</button><button data-full="1" aria-pressed="${full}">看全族（${people.length} 人）</button><span class="small muted">${full?"人很多，可以先在上面搜名字":`现在显示 ${nv} 人`}</span>`;
+  window.__ay = window.__gy = null; ancSoon();
 }
+$("ft").addEventListener("click", e => { const s = e.target.closest(".s"), n = e.target.closest(".node"); if (s) pick(people[+s.dataset.id]); else if (n && n.dataset.g) lineClick(e); else if (n) pick(people[+n.dataset.id]); });
+$("scope").addEventListener("click", e => { const b = e.target.closest("button[data-full]"); if (!b) return; setFull(b.dataset.full === "1"); const t = sel || me || focusOf(); const n = $("n"+(t.blood?t:t.partner).id); if (n) n.scrollIntoView({block:"center",inline:"center"}); });
+function setFull(v){ full = v; try{ localStorage.setItem("wang-full", v?"1":"0"); }catch(e){} drawTree(); paint(); }
 function paint(){
   document.querySelectorAll("#ft .on,#ft .me,#ft .sel").forEach(e => e.classList.remove("on","me","sel"));
-  if (me) $("n"+me.id).classList.add("me");
+  if (me && $("n"+me.id)) $("n"+me.id).classList.add("me");
   const T = sel || me;
   if (!T){
     $("who").innerHTML = `<div class="rel"><b>你是谁？</b>在上面搜你的名字（中文或拼音都可以），或在树上点你自己，再按「我是这个人」。</div><div class="small">不在族谱里（例如女朋友、朋友）？点你认识的那个人，按「用 TA 的角度看」，就知道别人是 TA 的什么人。不想选也可以，直接随便看。</div><div class="small muted">这台手机会记住，下次打开不用再选。</div>`;
@@ -375,27 +395,27 @@ function paint(){
     $("bar").innerHTML = "";
   } else {
     const r = relation(T);
-    r.path.forEach(p => { $("n"+p.id).classList.add("on"); });
+    r.path.forEach(p => { const n = $("n"+p.id); if (n) n.classList.add("on"); });
     for (let i=0;i<r.path.length-1;i++){ const a=r.path[i], b=r.path[i+1], kid = a.parent===b ? a : b; const e = $("e"+kid.id); if (e) e.classList.add("on"); }
     const chain = r.path.map(p => `<span class="p">${esc(p.name)}</span>`).join("<span>→</span>") + (r.via ? `<span>＋ 配偶</span><span class="p">${esc(T.name)}</span>` : "");
     mid = `<div class="rel">${T===me ? (asWho==="sp" ? `这是你的另一半 <b>${esc(me.name)}</b>。点树上任何一个人，看他是 ${esc(me.name)} 的什么人。` : asWho==="view" ? `现在用 <b>${esc(me.name)}</b> 的角度看。点树上任何一个人，看他是 ${esc(me.name)} 的什么人。` : `这是<b>我</b>。点树上任何一个人，看他是我的什么人。`) : `是 <b>${esc(me.name)}</b> 的 <b>${esc(r.term)}</b>`}</div>
     ${T!==me ? `<div class="chain">${chain}</div><div class="small muted">共同的祖先：${esc(r.lca.name)}</div>` : ""}`;
     $("bar").innerHTML = T===me ? "" : `${esc(T.name)} 是 ${esc(me.name)} 的 <b>${esc(r.term)}</b>`;
   }
-  $("n"+tb.id).classList.add("sel");
+  if ($("n"+tb.id)) $("n"+tb.id).classList.add("sel");
   $("who").innerHTML = `<div class="row" style="justify-content:space-between"><div><span class="name">${esc(T.name)}</span> <span class="muted">第 ${gen} 世${T.blood?` · 「${POEM[T.depth+8]}」字辈`:""}${T.role?" · "+esc(T.role):""}</span></div>
     <div class="row">${(T.blood || !me) && T!==me ? `<button id="setme"${me?"":` class="primary"`}>我是这个人</button>` : ""}${T.blood && !me ? `<button id="asme">用 TA 的角度看</button>` : ""}${T===me ? `<button id="clrme">换人</button>` : ""}</div></div>
     ${mid}
     <div class="small muted">${[dad,sp,kids].filter(Boolean).join(" · ")}</div>
     ${tb.src ? `<div class="row small muted" style="margin-top:6px">${tb.src.pg?`<button id="srcpg">看原书第 ${tb.src.pg} 页</button>`:""}${tb.src.nb?`<span>出自新版《外砂王氏文愚公族谱》第 ${tb.src.nb} 页${tb.src.alt?`，书里写作「${tb.src.alt}」`:""}</span>`:""}</div>` : ""}`;
   syncBar();
-  const setMe = (p, a) => { me = p; asWho = a; sel = null; try{ localStorage.setItem("wang-me", me.name); localStorage.setItem("wang-as", a); }catch(e){} paint(); paintPoem(); paintLine(); };
+  const setMe = (p, a) => { me = p; asWho = a; sel = null; try{ localStorage.setItem("wang-me", me.name); localStorage.setItem("wang-as", a); }catch(e){} drawTree(); paint(); paintPoem(); paintLine(); const n = $("n"+me.id); if (n) n.scrollIntoView({block:"center",inline:"center"}); };
   const b = $("setme"); if (b) b.onclick = () => T.blood ? setMe(T, "") : setMe(T.partner, "sp");
   const v = $("asme"); if (v) v.onclick = () => setMe(T, "view");
   const sg = $("srcpg"); if (sg) sg.onclick = () => { const i = BOOK.rows.findIndex(r => r[0]===tb.src.pg && r[5].includes(tb.src.k)); openPage(tb.src.pg, i<0 ? null : BOOK.rows[i].slice(1,5)); };
-  const c = $("clrme"); if (c) c.onclick = () => { me = null; asWho = ""; sel = null; try{localStorage.removeItem("wang-me"); localStorage.removeItem("wang-as")}catch(e){} paint(); paintPoem(); paintLine(); $("q").focus(); };
+  const c = $("clrme"); if (c) c.onclick = () => { me = null; asWho = ""; sel = null; try{localStorage.removeItem("wang-me"); localStorage.removeItem("wang-as")}catch(e){} drawTree(); paint(); paintPoem(); paintLine(); $("q").focus(); };
 }
-function pick(p, scroll){ sel = p; paint(); if (scroll){ const n = $("n"+(p.blood?p:p.partner).id); n.scrollIntoView({block:"center",inline:"center"}); } }
+function pick(p, scroll){ sel = p; if (!shown(p)) setFull(true); else paint(); if (scroll){ const n = $("n"+(p.blood?p:p.partner).id); if (n) n.scrollIntoView({block:"center",inline:"center"}); } }
 
 function paintLine(){
   const ref = me || root, mg = 20 + ref.depth, chain = []; for (let p = ref; p; p = p.parent) chain.unshift(p);
@@ -484,8 +504,8 @@ function syncBar(){ $("bar").hidden = cur!=="tree" || !$("bar").innerHTML; }
 function go(v){ show(v); if (location.hash !== "#"+v) location.hash = v; }
 function show(v){ if (!VIEWS.includes(v)) v = "tree"; if (v===cur) return; cur = v; window.scrollTo(0,0); syncBar();
   VIEWS.forEach(x => { $("v-"+x).hidden = x!==v; });
-  if (v==="tree") { window.__ay = null; ancSoon(); }
-  if (v==="tree" && !window.__tl){ const tb = document.querySelector(".treebox"); if (tb.clientWidth){ tb.scrollLeft = 19*CW; window.__tl = 1; if (me){ const n = $("n"+me.id); window.scrollTo(0, n.getBoundingClientRect().top + scrollY - innerHeight/2); } } }
+  if (v==="tree") { window.__ay = window.__gy = null; ancSoon(); }
+  if (v==="tree" && !window.__tl){ const tb = document.querySelector(".treebox"); if (tb.clientWidth){ tb.scrollLeft = 19*CW; window.__tl = 1; const t = me || focusOf(), n = $("n"+t.id); if (n) window.scrollTo(0, n.getBoundingClientRect().top + scrollY - innerHeight/2); } }
   document.querySelectorAll("nav.tabs a").forEach(a => a.setAttribute("aria-current", a.dataset.v===v));
   if (v==="book" && !$("pimg").src) showPage(page);
   if (v==="search") search($("q").value);
@@ -494,6 +514,8 @@ function show(v){ if (!VIEWS.includes(v)) v = "tree"; if (v===cur) return; cur =
 function placeAnc(){
   const ft = $("ft"); if (!ft || !$("an1") || $("v-tree").hidden) return;
   const r = ft.getBoundingClientRect(), H = ft.offsetHeight, ry = window.__ry, OFF = 19*CW;
+  const hb = document.querySelector("header.top").getBoundingClientRect().bottom, gy = Math.round(Math.max(0, Math.min(H-28, hb - r.top)));
+  if (window.__gy !== gy){ window.__gy = gy; document.querySelectorAll("#ft .gen").forEach(g => g.style.top = gy+"px"); }
   const y = Math.round(Math.max(TOP+13, Math.min(H-20, innerHeight*0.45 - r.top)));
   if (window.__ay === y) return; window.__ay = y;
   LINE.forEach(a => { const g = a[0], x = (g-1)*CW, x1 = x+NW;
@@ -506,7 +528,17 @@ const ancSoon = () => { if (!__ancRaf) __ancRaf = requestAnimationFrame(() => { 
 window.addEventListener("scroll", ancSoon, {passive:true});
 window.addEventListener("resize", ancSoon);
 window.addEventListener("hashchange", () => show(location.hash.slice(1)));
-$("q").addEventListener("input", e => { if (location.hash !== "#search") location.hash = "search"; search(e.target.value); });
+function treeHit(raw, any){
+  const q = raw.trim().replace(/\s+/g,""); if (!q) return null;
+  const nm = n => n === q || n === "王"+q;
+  const ex = people.filter(p => nm(p.name)); if (ex.length === 1) return ex[0];
+  if (!any) return null;
+  const b = document.querySelector('#results .hit[data-person]'); return b ? people[+b.dataset.person] : null; }
+function jump(p){ go("tree"); pick(p, true); $("q").blur(); }
+let __qt = 0;
+$("q").addEventListener("input", e => { if (location.hash !== "#search") location.hash = "search"; search(e.target.value);
+  clearTimeout(__qt); const v = e.target.value; __qt = setTimeout(() => { const p = treeHit(v, false); if (p && cur === "search") jump(p); }, 700); });
+$("q").addEventListener("keydown", e => { if (e.key !== "Enter") return; e.preventDefault(); clearTimeout(__qt); const p = treeHit(e.target.value, true); if (p) jump(p); });
 $("prev").onclick = () => showPage(page-1); $("next").onclick = () => showPage(page+1);
 $("pgno").onchange = e => showPage(+e.target.value);
 $("zoom").onclick = () => { big = !big; $("sheet").classList.toggle("big", big); $("zoom").textContent = big ? "缩小" : "放大"; };
